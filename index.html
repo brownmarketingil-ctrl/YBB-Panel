@@ -1734,6 +1734,48 @@
     text-align: center; padding: 20px; color: var(--text-muted); font-size: 13px;
   }
 
+  /* Password step on login */
+  .login-password-section {
+    margin-top: 14px;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 16px;
+    background: #fafbfd;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+  .login-password-user {
+    display: flex; align-items: center; gap: 12px;
+    padding: 6px 4px 4px;
+  }
+  .login-password-user .avatar {
+    width: 44px; height: 44px; font-size: 14px; margin: 0; border: 2px solid #fff;
+  }
+  .login-password-user .info { flex: 1; min-width: 0; }
+  .login-password-user .nm { font-weight: 700; font-size: 15px; color: var(--text); }
+  .login-password-user .rl { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+  #loginPassword {
+    width: 100%; padding: 12px 14px;
+    border: 1px solid var(--border-strong); border-radius: 10px;
+    font-size: 15px; background: #fff;
+    letter-spacing: 4px;
+  }
+  #loginPassword:focus {
+    outline: none; border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(0,115,234,.12);
+  }
+  .login-password-error {
+    color: var(--st-stuck); font-size: 12px; font-weight: 600;
+    padding: 6px 10px; background: rgba(226,68,92,.08);
+    border-radius: 6px; text-align: center;
+  }
+  #loginPasswordSubmit { width: 100%; padding: 12px; font-size: 14px; font-weight: 600; }
+  .login-password-cancel {
+    background: transparent; border: none; color: var(--text-muted);
+    font-size: 13px; cursor: pointer; padding: 6px;
+    text-align: center;
+  }
+  .login-password-cancel:hover { color: var(--primary); }
+
   .login-foot {
     margin-top: 22px; color: var(--text-muted); font-size: 12px;
     text-align: center; padding: 14px 0 0;
@@ -1776,6 +1818,15 @@
         <input class="account-search" id="loginSearch" placeholder="Search your name…" autocomplete="off" />
       </div>
       <div class="account-list" id="accountList"></div>
+    </div>
+
+    <!-- Password step (shown after picking an account) -->
+    <div class="login-password-section" id="loginPasswordSection" style="display:none">
+      <div class="login-password-user" id="loginPasswordUser"></div>
+      <input type="password" id="loginPassword" placeholder="Enter your password" autocomplete="off" />
+      <div class="login-password-error" id="loginPasswordError" style="display:none"></div>
+      <button class="btn btn-primary" id="loginPasswordSubmit">Sign in →</button>
+      <button class="login-password-cancel" id="loginPasswordCancel">← Use a different account</button>
     </div>
 
     <div class="login-foot">
@@ -2333,6 +2384,11 @@
           <input type="text" id="w-icon" placeholder="👑 / 🦁 / leave blank" maxlength="4" />
           <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Leave blank to use 2-letter initials.</div>
         </div>
+      </div>
+      <div class="form-group">
+        <label>🔒 Password <span style="font-weight:400;color:var(--text-muted);font-size:11px;text-transform:none;letter-spacing:0">— admin-only field</span></label>
+        <input type="text" id="w-password" placeholder="0000" autocomplete="off" />
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Workers default to <b>0000</b>, admin defaults to <b>1111</b>. You can set any value.</div>
       </div>
       <div class="form-group" style="background:var(--bg);padding:12px;border-radius:8px">
         <label style="margin-bottom:8px">Preview</label>
@@ -4411,20 +4467,40 @@ function renderWorkers() {
 
   const maxActive = Math.max(...Object.values(stats).map(s => s.active), 1);
 
-  if (!workers.length) {
+  // Admin card — only visible to admin, shown at the top of the grid
+  let adminCardHtml = '';
+  if (me === 'admin') {
+    adminCardHtml = `
+    <div class="worker-card admin-card" data-wid="admin">
+      <div style="position:absolute;top:10px;left:10px;background:var(--primary);color:#fff;font-size:9px;padding:2px 7px;border-radius:4px;font-weight:700;letter-spacing:.5px">OWNER</div>
+      <button class="worker-edit" data-id="admin" title="Edit admin account & password">✎</button>
+      <div class="worker-avatar" style="background:${ADMIN.color}">${initials(ADMIN)}</div>
+      <div class="worker-name">${escapeHtml(ADMIN.name)}</div>
+      <div class="worker-role">${escapeHtml(ADMIN.role)}</div>
+      <div class="worker-tags" style="min-height:0;margin:6px 0 4px">
+        <span class="worker-tag" style="background:rgba(0,115,234,.12);color:var(--primary)">🔒 ${passwordFor('admin')}</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);text-align:center;line-height:1.4;margin-top:8px;padding-top:10px;border-top:1px solid var(--border)">
+        Sees and manages all team data, tasks, and passwords
+      </div>
+    </div>`;
+  }
+
+  if (!workers.length && !adminCardHtml) {
     $('#workersGrid').innerHTML = `<div class="empty"><div class="big">👥</div>No workers match your filters.</div>`;
     return;
   }
 
-  const html = workers.map(w => {
+  const isAdmin = me === 'admin';
+  const html = adminCardHtml + workers.map(w => {
     const s = stats[w.id] || { active: 0, done: 0, stuck: 0, overdue: 0, critical: 0, unread: 0 };
     const pct = (s.active / maxActive) * 100;
     const tags = [];
+    if (isAdmin) tags.push(`<span class="worker-tag" style="background:rgba(0,115,234,.10);color:var(--primary)">🔒 ${passwordFor(w.id)}</span>`);
     if (s.stuck) tags.push(`<span class="worker-tag stuck">${s.stuck} stuck</span>`);
     if (s.overdue) tags.push(`<span class="worker-tag overdue">${s.overdue} overdue</span>`);
     if (s.critical) tags.push(`<span class="worker-tag critical">🔥 ${s.critical} critical</span>`);
     if (s.unread) tags.push(`<span class="worker-tag unread">💬 ${s.unread} unread</span>`);
-    const isAdmin = me === 'admin';
     return `
     <div class="worker-card" data-wid="${w.id}">
       <div class="worker-status-dot" title="Active worker"></div>
@@ -4472,6 +4548,7 @@ function renderWorkers() {
         if (it.owners) it.owners = it.owners.filter(o => o !== id);
         if (it.owner === id) it.owner = (it.owners && it.owners[0]) || '';
       });
+      if (state.passwords) delete state.passwords[id];
       saveState(); renderWorkers();
     }
   });
@@ -4492,6 +4569,89 @@ function renderWorkers() {
 /* =========================================================
    OPEN CHAT — Telegram-style team-wide group chat
    ========================================================= */
+
+/* Edit/delete rules:
+   - Admin can delete any message
+   - Each user can edit OR delete their own message within 10 minutes of sending */
+const OPEN_CHAT_EDIT_WINDOW_MS = 10 * 60 * 1000;
+function isOpenChatEditable(m, userId) {
+  if (m.from !== userId) return false;
+  return (Date.now() - new Date(m.createdAt).getTime()) <= OPEN_CHAT_EDIT_WINDOW_MS;
+}
+function isOpenChatDeletable(m, userId) {
+  if (userId === 'admin') return true;
+  return isOpenChatEditable(m, userId);
+}
+
+function deleteOpenChatMessage(messageId) {
+  const m = (state.openChat || []).find(x => x.id === messageId);
+  if (!m) return;
+  if (!isOpenChatDeletable(m, state.currentUser)) {
+    toast('You can no longer delete this message.', 'error'); return;
+  }
+  if (!confirm('Delete this message? This cannot be undone.')) return;
+  state.openChat = state.openChat.filter(x => x.id !== messageId);
+  saveState(); renderOpenChat();
+}
+
+function startEditOpenChatMessage(messageId) {
+  const m = (state.openChat || []).find(x => x.id === messageId);
+  if (!m) return;
+  if (!isOpenChatEditable(m, state.currentUser)) {
+    toast('Edit window expired (10 min limit).', 'error'); return;
+  }
+  state.ui = state.ui || {};
+  state.ui.openChatEditingId = messageId;
+  renderOpenChat();
+}
+
+function saveOpenChatEdit(messageId) {
+  const m = (state.openChat || []).find(x => x.id === messageId);
+  if (!m) return;
+  if (!isOpenChatEditable(m, state.currentUser)) {
+    toast('Edit window expired (10 min limit).', 'error');
+    state.ui.openChatEditingId = null; renderOpenChat(); return;
+  }
+  const ta = document.getElementById('msg-edit-' + messageId);
+  if (!ta) return;
+  const val = ta.value.trim();
+  if (!val) { toast('Message cannot be empty.', 'error'); return; }
+  m.body = val;
+  m.editedAt = new Date().toISOString();
+  state.ui.openChatEditingId = null;
+  saveState(); renderOpenChat();
+}
+
+function cancelOpenChatEdit() {
+  state.ui.openChatEditingId = null;
+  renderOpenChat();
+}
+
+function showOpenChatMessageMenu(anchor, messageId) {
+  const m = (state.openChat || []).find(x => x.id === messageId);
+  if (!m) return;
+  const me = state.currentUser;
+  const canEdit = isOpenChatEditable(m, me);
+  const canDelete = isOpenChatDeletable(m, me);
+  if (!canEdit && !canDelete) return;
+  closeAllDropdowns();
+  const rect = anchor.getBoundingClientRect();
+  const dd = document.createElement('div');
+  dd.className = 'dropdown';
+  dd.style.left = (window.scrollX + rect.right - 140) + 'px';
+  dd.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+  dd.style.minWidth = '140px';
+  let html = '';
+  if (canEdit) html += `<div class="opt plain" data-action="edit">✎ Edit</div>`;
+  if (canDelete) html += `<div class="opt plain" data-action="delete" style="color:var(--st-stuck)">🗑 Delete</div>`;
+  dd.innerHTML = html;
+  dd.querySelectorAll('.opt').forEach(o => o.onclick = () => {
+    if (o.dataset.action === 'edit') startEditOpenChatMessage(messageId);
+    else if (o.dataset.action === 'delete') deleteOpenChatMessage(messageId);
+    closeAllDropdowns();
+  });
+  document.body.appendChild(dd);
+}
 const COMMON_EMOJIS = [
   '😀','😂','😍','🥳','😎','🤔','😢','😡',
   '👍','👎','👏','🙌','🤝','💪','🙏','🤞',
@@ -4530,6 +4690,7 @@ function renderOpenChat() {
     let html = '';
     let prevDay = '';
     let prevSender = '';
+    const editingId = state.ui?.openChatEditingId;
     for (const m of messages) {
       const day = new Date(m.createdAt).toDateString();
       if (day !== prevDay) {
@@ -4542,20 +4703,49 @@ function renderOpenChat() {
       const sameAsPrev = prevSender === m.from;
       prevSender = m.from;
       const att = bubbleAttachmentsHtml(m.attachments);
+      const canShowMenu = isOpenChatEditable(m, me) || isOpenChatDeletable(m, me);
+      const isEditing = editingId === m.id;
+      const editedTag = m.editedAt ? `<span class="b-edited">(edited)</span>` : '';
+
+      const bubbleInner = isEditing ? `
+        <div class="msg-edit-area">
+          <textarea id="msg-edit-${m.id}">${escapeHtml(m.body || '')}</textarea>
+          <div class="msg-edit-actions">
+            <button class="btn btn-sm" data-act="cancel-edit">Cancel</button>
+            <button class="btn btn-sm btn-primary" data-act="save-edit" data-mid="${m.id}">Save</button>
+          </div>
+        </div>` : `
+        ${!sent && !sameAsPrev ? `<div class="b-title" style="font-size:12px;color:${sender.color};filter:brightness(.55)">${escapeHtml(sender.name)}</div>` : ''}
+        ${m.body ? `<div class="b-body">${escapeHtml(m.body)}</div>` : ''}
+        ${att}
+        <div class="b-meta">${sent?'You':escapeHtml(sender.name)} · ${fmtRelative(m.createdAt)}${editedTag}</div>`;
 
       html += `
         <div class="chat-msg ${sent?'sent':''} ${sameAsPrev?'same-sender':''}">
           <div class="avatar" style="background:${sender.color}">${initials(sender)}</div>
           <div class="chat-bubble">
-            ${!sent && !sameAsPrev ? `<div class="b-title" style="font-size:12px;color:${sender.color};filter:brightness(.55)">${escapeHtml(sender.name)}</div>` : ''}
-            ${m.body ? `<div class="b-body">${escapeHtml(m.body)}</div>` : ''}
-            ${att}
-            <div class="b-meta">${sent?'You':escapeHtml(sender.name)} · ${fmtRelative(m.createdAt)}</div>
+            ${bubbleInner}
+            ${(!isEditing && canShowMenu) ? `<button class="msg-menu-btn" data-mid="${m.id}" title="Message options">⋮</button>` : ''}
           </div>
         </div>`;
     }
     messagesEl.innerHTML = html;
     setTimeout(() => { messagesEl.scrollTop = messagesEl.scrollHeight; }, 60);
+
+    // Wire menu button + edit/save/cancel
+    messagesEl.querySelectorAll('.msg-menu-btn').forEach(b => b.onclick = (e) => {
+      e.stopPropagation(); showOpenChatMessageMenu(b, b.dataset.mid);
+    });
+    messagesEl.querySelectorAll('[data-act="save-edit"]').forEach(b => b.onclick = (e) => {
+      e.stopPropagation(); saveOpenChatEdit(b.dataset.mid);
+    });
+    messagesEl.querySelectorAll('[data-act="cancel-edit"]').forEach(b => b.onclick = (e) => {
+      e.stopPropagation(); cancelOpenChatEdit();
+    });
+    if (editingId) {
+      const ta = document.getElementById('msg-edit-' + editingId);
+      if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+    }
   }
 
   $('#openchatMembers').textContent = `${state.workers.length + 1} members online`;
@@ -4681,8 +4871,9 @@ function openWorkerModal(workerId = null) {
     toast('Only the admin can add or edit workers.', 'error'); return;
   }
   editingWorkerId = workerId;
-  const w = workerId ? state.workers.find(x => x.id === workerId) : null;
-  $('#workerModalTitle').textContent = w ? 'Edit Worker' : 'New Worker';
+  const isAdmin = workerId === 'admin';
+  const w = isAdmin ? ADMIN : (workerId ? state.workers.find(x => x.id === workerId) : null);
+  $('#workerModalTitle').textContent = isAdmin ? 'Edit Admin Account' : (w ? 'Edit Worker' : 'New Worker');
   $('#saveWorkerBtn').textContent = w ? 'Save changes' : 'Add Worker';
   $('#w-name').value = w ? w.name : '';
   $('#w-role').value = w ? w.role : 'Media Buyer';
@@ -4690,6 +4881,8 @@ function openWorkerModal(workerId = null) {
   const pastels = ['#b3d4f5','#c5e6c5','#d9c2ed','#ffd9b3','#ffc4cc','#c4e0f5','#b5e0d6','#f5c2d9','#c9bce8','#ffe5b5','#c5e6d6'];
   $('#w-color').value = w ? w.color : pastels[Math.floor(Math.random() * pastels.length)];
   $('#w-icon').value = w ? (w.icon || '') : '';
+  // Password — show current value (admin can see it). Default for new workers is '0000'.
+  $('#w-password').value = workerId ? passwordFor(workerId) : '0000';
   refreshWorkerPreview();
   $('#workerModal').classList.add('show');
   setTimeout(() => $('#w-name').focus(), 60);
@@ -4722,19 +4915,35 @@ $('#saveWorkerBtn').onclick = () => {
     color: $('#w-color').value,
   };
   const icon = $('#w-icon').value.trim();
-  if (editingWorkerId) {
+  const password = $('#w-password').value.trim() || '0000';
+  state.passwords = state.passwords || {};
+
+  if (editingWorkerId === 'admin') {
+    // Update ADMIN profile + admin password
+    Object.assign(ADMIN, data);
+    if (icon) ADMIN.icon = icon; else delete ADMIN.icon;
+    state.adminProfile = { name: data.name, role: data.role, color: data.color, icon: icon || '' };
+    state.passwords.admin = password;
+    saveState(); editingWorkerId = null;
+    refreshUserChip();
+    closeModal('workerModal'); renderWorkers();
+    toast('Admin account updated', 'success');
+  } else if (editingWorkerId) {
     const w = state.workers.find(x => x.id === editingWorkerId);
     if (w) {
       Object.assign(w, data);
       if (icon) w.icon = icon; else delete w.icon;
     }
+    state.passwords[editingWorkerId] = password;
     saveState(); editingWorkerId = null;
     closeModal('workerModal'); renderWorkers();
     toast('Worker updated', 'success');
   } else {
-    const newWorker = { id: 'w'+uid(), ...data };
+    const newId = 'w' + uid();
+    const newWorker = { id: newId, ...data };
     if (icon) newWorker.icon = icon;
     state.workers.push(newWorker);
+    state.passwords[newId] = password;
     saveState();
     closeModal('workerModal'); renderWorkers();
     toast('Worker added','success');
@@ -5465,7 +5674,7 @@ function showLogin() {
   $('#accountList').innerHTML = ownerHtml + workerRows + '<div class="account-empty" id="accountEmpty" style="display:none">No matches</div>';
 
   // wire row clicks
-  $$('#accountList .account-row').forEach(r => r.onclick = () => signIn(r.dataset.uid));
+  $$('#accountList .account-row').forEach(r => r.onclick = () => requestPassword(r.dataset.uid));
 
   // selector toggle
   const sel = $('#accountSelector');
@@ -5494,11 +5703,16 @@ function showLogin() {
   search.onkeydown = e => {
     if (e.key === 'Enter') {
       const first = $$('#accountList .account-row').find(r => !r.classList.contains('hidden'));
-      if (first) signIn(first.dataset.uid);
+      if (first) requestPassword(first.dataset.uid);
     } else if (e.key === 'Escape') {
       wrap.classList.remove('open'); sel.classList.remove('open');
     }
   };
+
+  // Reset any password state from a previous attempt
+  $('#loginPasswordSection').style.display = 'none';
+  $('#accountSelector').style.display = '';
+  $('#accountListWrap').style.display = '';
 
   // open by default so users see the list immediately
   wrap.classList.add('open');
@@ -5509,18 +5723,102 @@ function showLogin() {
 }
 function hideLogin() { $('#loginOverlay').classList.remove('show'); }
 
+/* Password gate — passwords are stored in state.passwords (managed by admin from the Workers page).
+   Defaults: admin → 1111, every worker → 0000. */
+function passwordFor(uid) {
+  if (state.passwords && state.passwords[uid]) return state.passwords[uid];
+  return uid === 'admin' ? '1111' : '0000';
+}
+
+function requestPassword(uid) {
+  const user = uid === 'admin' ? ADMIN : workerById(uid);
+  if (!user) return;
+
+  // Hide the account picker, show the password step
+  $('#accountSelector').style.display = 'none';
+  $('#accountListWrap').style.display = 'none';
+  const pwSection = $('#loginPasswordSection');
+  pwSection.style.display = 'flex';
+  pwSection.dataset.uid = uid;
+
+  $('#loginPasswordUser').innerHTML = `
+    <div class="avatar" style="background:${user.color}">${initials(user)}</div>
+    <div class="info">
+      <div class="nm">${escapeHtml(user.name)}</div>
+      <div class="rl">${escapeHtml(user.role)}</div>
+    </div>`;
+
+  const inp = $('#loginPassword');
+  inp.value = '';
+  $('#loginPasswordError').style.display = 'none';
+  setTimeout(() => inp.focus(), 100);
+
+  inp.onkeydown = e => {
+    if (e.key === 'Enter') { e.preventDefault(); attemptPasswordSignIn(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancelPassword(); }
+    else $('#loginPasswordError').style.display = 'none';
+  };
+  $('#loginPasswordSubmit').onclick = () => attemptPasswordSignIn();
+  $('#loginPasswordCancel').onclick = () => cancelPassword();
+}
+
+function attemptPasswordSignIn() {
+  const uid = $('#loginPasswordSection').dataset.uid;
+  const pw = $('#loginPassword').value;
+  if (pw !== passwordFor(uid)) {
+    const err = $('#loginPasswordError');
+    err.textContent = '🔒 Wrong password — try again.';
+    err.style.display = 'block';
+    $('#loginPassword').value = '';
+    $('#loginPassword').focus();
+    return;
+  }
+  // success → reset password UI then sign in
+  $('#loginPasswordSection').style.display = 'none';
+  $('#accountSelector').style.display = '';
+  $('#accountListWrap').style.display = '';
+  signIn(uid);
+}
+
+function cancelPassword() {
+  $('#loginPasswordSection').style.display = 'none';
+  $('#accountSelector').style.display = '';
+  $('#accountListWrap').style.display = '';
+  if (state.currentUser) {
+    // Already signed in — they were trying to switch. Just close overlay.
+    $('#loginOverlay').classList.remove('show');
+  } else {
+    // Fresh sign-in — go back to account picker
+    $('#accountListWrap').classList.add('open');
+    $('#accountSelector').classList.add('open');
+    setTimeout(() => $('#loginSearch')?.focus(), 80);
+  }
+}
+
+/* Worker user-switcher → require password for target account */
+function requestSwitchTo(uid) {
+  $('#loginOverlay').classList.add('show');
+  // Hide picker chrome — go straight to password step
+  requestPassword(uid);
+}
+
 function signIn(uid) {
   state.currentUser = uid;
+  // Once admin successfully authenticates this session, they can roam freely between accounts.
+  // The flag stays true until sign-out (so admin can preview any worker's view, then go back).
+  state.session = state.session || {};
+  if (uid === 'admin') state.session.adminNavigator = true;
   saveState();
   refreshUserChip();
   updateBadges();
   hideLogin();
-  toast('Signed in as ' + (workerById(uid)?.name || 'Admin'), 'success');
+  toast('Signed in as ' + (workerById(uid)?.name || ADMIN.name), 'success');
   route('dashboard');
 }
 
 function signOut() {
   state.currentUser = null;
+  state.session = {}; // clear admin-navigator privilege
   saveState();
   showLogin();
 }
@@ -5564,17 +5862,26 @@ function renderUserMenu() {
       <span>Sign out</span>
     </div>`;
   $('#userMenu').innerHTML = html;
-  // direct switch
+  // Switching:
+  //  - If the session was started by admin (adminNavigator flag), all switches are free
+  //    (so admin can preview Asra → then jump to anyone else without re-typing passwords)
+  //  - Otherwise (worker signed in as themselves), every switch requires the target's password
   $$('#userMenu .user-opt[data-uid]').forEach(el => el.onclick = () => {
-    if (el.dataset.uid === state.currentUser) { $('#userMenu').classList.remove('show'); return; }
-    state.currentUser = el.dataset.uid;
-    saveState(); refreshUserChip(); updateBadges();
+    const targetUid = el.dataset.uid;
+    if (targetUid === state.currentUser) { $('#userMenu').classList.remove('show'); return; }
     $('#userMenu').classList.remove('show');
-    toast('Switched to ' + currentUser().name, 'success');
-    // refresh whichever page is open
-    const p = state.ui.currentPage;
-    if (p === 'message') route('inbox');
-    else route(p || 'dashboard', { board: state.ui.currentBoard || 'campaigns' });
+
+    const isAdminSession = state.session && state.session.adminNavigator;
+    if (isAdminSession) {
+      state.currentUser = targetUid;
+      saveState(); refreshUserChip(); updateBadges();
+      toast('Switched to ' + currentUser().name, 'success');
+      const p = state.ui.currentPage;
+      if (p === 'message') route('inbox');
+      else route(p || 'dashboard', { board: state.ui.currentBoard || 'campaigns' });
+    } else {
+      requestSwitchTo(targetUid);
+    }
   });
   $('#signOutOpt').onclick = () => {
     $('#userMenu').classList.remove('show');
@@ -5640,12 +5947,31 @@ $$('.nav-item').forEach(n => n.onclick = () => {
   state.voluumData = state.voluumData || [];
   state.messages = state.messages || [];
   state.openChat = state.openChat || [];
+  state.passwords = state.passwords || {};
+  state.adminProfile = state.adminProfile || {};
+  state.session = state.session || {}; // admin-navigator flag lives here
+  // Apply admin profile customizations (set by admin via Workers page)
+  if (state.adminProfile.name)  ADMIN.name  = state.adminProfile.name;
+  if (state.adminProfile.role)  ADMIN.role  = state.adminProfile.role;
+  if (state.adminProfile.color) ADMIN.color = state.adminProfile.color;
+  if (state.adminProfile.icon)  ADMIN.icon  = state.adminProfile.icon;
+  else if (state.adminProfile.icon === '') delete ADMIN.icon;
   state.ui.inboxTab = state.ui.inboxTab || 'all';
   state.ui.lastMsgPage = state.ui.lastMsgPage || 'inbox';
 
-  // ---- Auto-migrate worker roster (matches names, roles, and animal emoji) ----
-  const targetSig = DEFAULT_WORKERS.map(w => w.name + '|' + w.role + '|' + (w.animal||'')).join(',');
-  const currentSig = (state.workers || []).map(w => w.name + '|' + w.role + '|' + (w.animal||'')).join(',');
+  // ---- Safety net: if workers list got wiped/lost, re-seed from defaults ----
+  if (!Array.isArray(state.workers) || state.workers.length === 0) {
+    state.workers = DEFAULT_WORKERS.map(w => ({...w}));
+    // also reset stale Workers page filters so admin sees the full list
+    state.ui.workersSearch = '';
+    state.ui.workersRole = 'all';
+    state.ui.workersSort = 'name';
+    saveState();
+  }
+
+  // ---- Auto-migrate worker roster (matches names + roles) ----
+  const targetSig = DEFAULT_WORKERS.map(w => w.name + '|' + w.role).join(',');
+  const currentSig = (state.workers || []).map(w => w.name + '|' + w.role).join(',');
   if (currentSig !== targetSig) {
     state.workers = DEFAULT_WORKERS.map(w => ({...w}));
     if (state.currentUser && state.currentUser !== 'admin' && !state.workers.find(w => w.id === state.currentUser)) {
